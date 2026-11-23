@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP32 Audio Recorder — Interactive Wiring & System Flowchart</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom transitions & interactive SVG wire glows */
+    .wire-path {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke-width 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
+      cursor: pointer;
+    }
+    .wire-path:hover, .wire-active {
+      stroke-width: 4.5px !important;
+      filter: drop-shadow(0 0 6px currentColor);
+      opacity: 1 !important;
+    }
+    .wire-dimmed {
+      opacity: 0.18;
+    }
+    .pin-dot {
+      transition: r 0.15s ease, fill 0.15s ease;
+      cursor: pointer;
+    }
+    .pin-dot:hover {
+      r: 6.5;
+    }
+    .module-box {
+      transition: transform 0.2s ease, filter 0.2s ease;
+      cursor: pointer;
+    }
+    .module-box:hover {
+      filter: drop-shadow(0 6px 16px rgba(59, 130, 246, 0.18));
+    }
+    /* Flow pulse animation for active signal simulation */
+    @keyframes dashFlow {
+      to {
+        stroke-dashoffset: -24;
+      }
+    }
+    .wire-animated {
+      stroke-dasharray: 8 4;
+      animation: dashFlow 0.8s linear infinite;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.35);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.55);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-200 selection:bg-blue-500 selection:text-white">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-30 border-b border-slate-200 dark:border-slate-800 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight leading-tight">ESP32 Push-Button Audio Recorder</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400">30-Pin DevKit Silkscreen (D12, D13, 3V3, GND) • INMP441 I2S Mic • SPI MicroSD</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs & Theme Switcher -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <nav class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700" role="tablist">
+          <button id="tab-btn-wiring" onclick="switchTab('wiring')" class="tab-btn px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm">
+            1. Wiring Schematic
+          </button>
+          <button id="tab-btn-flow" onclick="switchTab('flow')" class="tab-btn px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white">
+            2. Logic Flowchart
+          </button>
+          <button id="tab-btn-code" onclick="switchTab('code')" class="tab-btn px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white">
+            3. Arduino C++ Code
+          </button>
+        </nav>
+
+        <button id="theme-toggle" onclick="toggleTheme()" title="Toggle Light/Dark Mode" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+          <!-- Sun icon (shown in dark mode) -->
+          <svg id="icon-sun" class="w-4 h-4 hidden dark:block text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+          </svg>
+          <!-- Moon icon (shown in light mode) -->
+          <svg id="icon-moon" class="w-4 h-4 block dark:hidden text-slate-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- ========================================================= -->
+    <!-- VIEW 1: HARDWARE WIRING & PINOUT DIAGRAM                  -->
+    <!-- ========================================================= -->
+    <section id="view-wiring" class="space-y-6">
+      <!-- Filter & Control Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 mr-1">Filter Signals:</span>
+          <button onclick="filterProtocol('all')" data-filter="all" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white shadow-sm transition">All Wires</button>
+          <button onclick="filterProtocol('power')" data-filter="power" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">Power / GND Bus</button>
+          <button onclick="filterProtocol('spi')" data-filter="spi" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">SPI (MicroSD)</button>
+          <button onclick="filterProtocol('i2s')" data-filter="i2s" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">I2S (Mic)</button>
+          <button onclick="filterProtocol('gpio')" data-filter="gpio" class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">Button Trigger</button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btn-animate-signals" onclick="toggleSignalAnimation()" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="animate-label">Simulate Signal Flow</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Grid: Interactive SVG Canvas + Inspector Sidebar -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- Interactive SVG Schematic Canvas (8 cols on desktop) -->
+        <div class="lg:col-span-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Hover or tap any wire or module pin to inspect connection details
+            </span>
+            <span class="text-[11px] font-mono text-slate-400">3.3V Logic Level</span>
+          </div>
+
+          <!-- Responsive SVG Wrapper -->
+          <div class="w-full overflow-x-auto bg-slate-50/70 dark:bg-[#0b1120] p-2 sm:p-4">
+            <svg id="wiring-svg" viewBox="0 0 960 640" class="w-full h-auto min-w-[680px] select-none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <!-- Subtle engineering grid background -->
+                <pattern id="smallGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="currentColor" class="text-slate-200/70 dark:text-slate-800/60" stroke-width="0.7"/>
+                </pattern>
+                <pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse">
+                  <rect width="100" height="100" fill="url(#smallGrid)"/>
+                  <path d="M 100 0 L 0 0 0 100" fill="none" stroke="currentColor" class="text-slate-300/70 dark:text-slate-800" stroke-width="1.2"/>
+                </pattern>
+              </defs>
+
+              <!-- Grid Background -->
+              <rect width="960" height="640" fill="url(#grid)" rx="12" />
+
+              <!-- ======================================================= -->
+              <!-- WIRES LAYER (Rendered underneath pins for clean joints)  -->
+              <!-- ======================================================= -->
+              <g id="wires-group">
+                <!-- 1. MicroSD VCC -> ESP32 Single 3V3 (Red) -->
+                <path id="wire-sd-vcc" data-protocol="power" data-title="MicroSD VCC → ESP32 3V3 (Single 3.3V Rail)" data-proto-name="Shared 3.3V Power Bus (3.3V DC)" data-desc="Connects MicroSD VCC to the ESP32's single 3V3 pin (shared via power rail/node with INMP441 VDD). Note: If your MicroSD adapter has a 3.3V LDO regulator, use VIN (5V) instead."
+                  d="M 240 120 L 315 120 L 315 105 L 395 105" stroke="#ef4444" stroke-width="3" class="wire-path" />
+
+                <!-- 2. MicroSD GND -> ESP32 GND #1 (Slate/Black) -->
+                <path id="wire-sd-gnd" data-protocol="power" data-title="MicroSD GND → ESP32 GND (Top-Left GND)" data-proto-name="Shared Common Ground (0V)" data-desc="Connects MicroSD GND to the ESP32 common ground bus. All GND pins on the ESP32 DevKit are internally tied together."
+                  d="M 240 150 L 302 150 L 302 135 L 395 135" stroke="#64748b" stroke-width="3" class="wire-path" />
+
+                <!-- 3. MicroSD MISO -> ESP32 D19 (GPIO19) (Blue) -->
+                <path id="wire-sd-miso" data-protocol="spi" data-title="MicroSD MISO → ESP32 D19 (GPIO19)" data-proto-name="VSPI MISO (Master In Slave Out)" data-desc="Data line carrying card status and read data from the MicroSD card back to the ESP32 on silkscreen pin D19 (GPIO19)."
+                  d="M 240 180 L 290 180 L 290 265 L 395 265" stroke="#3b82f6" stroke-width="3" class="wire-path" />
+
+                <!-- 4. MicroSD MOSI -> ESP32 D23 (GPIO23) (Emerald) -->
+                <path id="wire-sd-mosi" data-protocol="spi" data-title="MicroSD MOSI → ESP32 D23 (GPIO23)" data-proto-name="VSPI MOSI (Master Out Slave In)" data-desc="High-speed data line streaming 16-bit PCM audio samples from ESP32 RAM into the .WAV file on silkscreen pin D23 (GPIO23)."
+                  d="M 240 210 L 280 210 L 280 200 L 395 200" stroke="#10b981" stroke-width="3" class="wire-path" />
+
+                <!-- 5. MicroSD SCK -> ESP32 D18 (GPIO18) (Amber) -->
+                <path id="wire-sd-sck" data-protocol="spi" data-title="MicroSD SCK → ESP32 D18 (GPIO18)" data-proto-name="VSPI SCK (Serial Clock)" data-desc="Synchronizes SPI data transfers between the ESP32 and MicroSD card controller on silkscreen pin D18 (GPIO18)."
+                  d="M 240 240 L 270 240 L 270 297 L 395 297" stroke="#f59e0b" stroke-width="3" class="wire-path" />
+
+                <!-- 6. MicroSD CS -> ESP32 D5 (GPIO5) (Purple) -->
+                <path id="wire-sd-cs" data-protocol="spi" data-title="MicroSD CS → ESP32 D5 (GPIO5)" data-proto-name="VSPI CS (Chip Select)" data-desc="Active-LOW select line used by the ESP32 SD library on silkscreen pin D5 (GPIO5) to address the MicroSD card."
+                  d="M 240 270 L 260 270 L 260 329 L 395 329" stroke="#a855f7" stroke-width="3" class="wire-path" />
+
+                <!-- 7. Push Button Pin 1 -> ESP32 D4 (GPIO4) (Cyan) -->
+                <path id="wire-btn-gpio" data-protocol="gpio" data-title="Push Button Pin 1 → ESP32 D4 (GPIO4)" data-proto-name="Digital Input (INPUT_PULLUP)" data-desc="Uses internal INPUT_PULLUP on silkscreen pin D4 (GPIO4) to GND—no external pull-up resistor needed. Reads HIGH normally and LOW when pressed to toggle recording."
+                  d="M 240 465 L 330 465 L 330 361 L 395 361" stroke="#06b6d4" stroke-width="3" class="wire-path" />
+
+                <!-- 8. Push Button Pin 2 -> ESP32 GND (Bottom-Left GND) (Slate/Black) -->
+                <path id="wire-btn-gnd" data-protocol="power" data-title="Push Button Pin 2 → ESP32 GND (Bottom-Left GND)" data-proto-name="Common Ground (0V)" data-desc="Pulls D4 (GPIO4) to GND when pressed. Shares the common ground bus with the MicroSD and INMP441 modules."
+                  d="M 240 505 L 350 505 L 350 553 L 395 553" stroke="#64748b" stroke-width="3" class="wire-path" />
+
+                <!-- 9. INMP441 VDD -> ESP32 Single 3V3 via Shared Rail (Red) -->
+                <path id="wire-mic-vdd" data-protocol="power" data-title="INMP441 VDD → ESP32 3V3 (Shared 3.3V Rail)" data-proto-name="Shared 3.3V Power Bus (3.3V DC)" data-desc="Powers the INMP441 microphone (3.3V max) from the ESP32's single 3V3 pin via a breadboard 3.3V power rail. Never apply 5V to INMP441 VDD."
+                  d="M 720 135 L 655 135 L 655 78 L 315 78 L 315 105 L 395 105" stroke="#ef4444" stroke-width="3" class="wire-path" />
+
+                <!-- 10. INMP441 GND -> ESP32 GND (Bottom-Right GND) (Slate/Black) -->
+                <path id="wire-mic-gnd" data-protocol="power" data-title="INMP441 GND → ESP32 GND (Bottom-Right GND)" data-proto-name="Shared Common Ground (0V)" data-desc="Connects INMP441 GND to the ESP32's bottom-right GND pin. All GND pins share the same 0V reference."
+                  d="M 720 165 L 642 165 L 642 553 L 565 553" stroke="#64748b" stroke-width="3" class="wire-path" />
+
+                <!-- 11. INMP441 L/R -> GND (Grey Dashed - Channel Select) -->
+                <path id="wire-mic-lr" data-protocol="i2s" data-title="INMP441 L/R → GND (Left Channel Select)" data-proto-name="I2S Channel Select" data-desc="Tying L/R to GND selects the Left I2S channel so INMP441 data aligns with I2S_CHANNEL_FMT_ONLY_LEFT."
+                  d="M 720 195 L 668 195 L 668 165 L 642 165" stroke="#94a3b8" stroke-width="2.5" stroke-dasharray="5 3" class="wire-path" />
+
+                <!-- 12. INMP441 WS -> ESP32 D25 (GPIO25) (Pink) -->
+                <path id="wire-mic-ws" data-protocol="i2s" data-title="INMP441 WS → ESP32 D25 (GPIO25)" data-proto-name="I2S Word Select (LRCLK)" data-desc="Frame clock running at the sample rate (16 kHz) on silkscreen pin D25 (GPIO25)."
+                  d="M 720 225 L 620 225 L 620 361 L 565 361" stroke="#ec4899" stroke-width="3" class="wire-path" />
+
+                <!-- 13. INMP441 SCK -> ESP32 D26 (GPIO26) (Orange) -->
+                <path id="wire-mic-sck" data-protocol="i2s" data-title="INMP441 SCK → ESP32 D26 (GPIO26)" data-proto-name="I2S Bit Clock (BCLK)" data-desc="Bit clock generated by the ESP32 I2S peripheral on silkscreen pin D26 (GPIO26)."
+                  d="M 720 255 L 608 255 L 608 393 L 565 393" stroke="#f97316" stroke-width="3" class="wire-path" />
+
+                <!-- 14. INMP441 SD -> ESP32 D33 (GPIO33) (Teal) -->
+                <path id="wire-mic-sd" data-protocol="i2s" data-title="INMP441 SD → ESP32 D33 (GPIO33)" data-proto-name="I2S Serial Data In (DIN)" data-desc="Serial digital PCM audio data stream from INMP441 into ESP32 on silkscreen pin D33 (GPIO33)."
+                  d="M 720 285 L 596 285 L 596 457 L 565 457" stroke="#14b8a6" stroke-width="3" class="wire-path" />
+              </g>
+
+              <!-- ======================================================= -->
+              <!-- MODULE 1: ESP32 30-PIN DEVKIT SILKSCREEN (CENTER)        -->
+              <!-- ======================================================= -->
+              <g id="mod-esp32" class="module-box" onclick="selectModule('esp32')">
+                <!-- PCB Shadow & Main Board -->
+                <rect x="395" y="55" width="170" height="545" rx="14" fill="#1e293b" stroke="#334155" stroke-width="2.5" />
+                <!-- USB Micro/Type-C Connector at Bottom -->
+                <rect x="452" y="582" width="56" height="22" rx="4" fill="#94a3b8" stroke="#475569" stroke-width="1.5" />
+                <text x="480" y="597" text-anchor="middle" fill="#0f172a" font-family="JetBrains Mono" font-size="9" font-weight="700">USB</text>
+                
+                <!-- ESP32-WROOM-32 Metal Shield -->
+                <rect x="422" y="72" width="116" height="92" rx="6" fill="#cbd5e1" stroke="#64748b" stroke-width="1.5" />
+                <!-- PCB Antenna Trace Pattern -->
+                <rect x="422" y="58" width="116" height="16" rx="3" fill="#0f172a" />
+                <path d="M 432 69 L 432 62 L 446 62 L 446 69 L 460 69 L 460 62 L 474 62 L 474 69 L 488 69 L 488 62 L 502 62 L 502 69 L 526 69" fill="none" stroke="#eab308" stroke-width="1.8" />
+                <text x="480" y="112" text-anchor="middle" fill="#1e293b" font-family="Inter" font-size="10.5" font-weight="700">ESP32 DevKit</text>
+                <text x="480" y="128" text-anchor="middle" fill="#475569" font-family="JetBrains Mono" font-size="8.5">30-Pin Silkscreen</text>
+                <text x="480" y="142" text-anchor="middle" fill="#475569" font-family="JetBrains Mono" font-size="8">1× 3V3 • 3× GND</text>
+
+                <!-- Onboard EN & BOOT Tactile Buttons -->
+                <rect x="414" y="544" width="20" height="24" rx="3" fill="#475569" />
+                <circle cx="424" cy="556" r="5" fill="#e2e8f0" />
+                <text x="424" y="576" text-anchor="middle" fill="#94a3b8" font-family="JetBrains Mono" font-size="7.5">EN</text>
+
+                <rect x="526" y="544" width="20" height="24" rx="3" fill="#475569" />
+                <circle cx="536" cy="556" r="5" fill="#e2e8f0" />
+                <text x="536" y="576" text-anchor="middle" fill="#94a3b8" font-family="JetBrains Mono" font-size="7.5">BOOT</text>
+
+                <!-- Left Side Pins (15 Pins: Single 3V3, 2× GND, D-labels) -->
+                <g font-family="JetBrains Mono" font-size="9.5" font-weight="600">
+                  <!-- 3V3 (Single 3.3V pin) -->
+                  <circle cx="395" cy="105" r="4.5" fill="#ef4444" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="405" y="108" fill="#fca5a5">3V3</text>
+
+                  <!-- GND #1 -->
+                  <circle cx="395" cy="137" r="4.5" fill="#64748b" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="405" y="140" fill="#cbd5e1">GND</text>
+
+                  <!-- D15 -->
+                  <circle cx="395" cy="169" r="3.8" fill="#475569" />
+                  <text x="405" y="172" fill="#94a3b8">D15</text>
+
+                  <!-- D23 (MOSI) -->
+                  <circle cx="395" cy="200" r="4.5" fill="#10b981" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="405" y="203" fill="#6ee7b7">D23</text>
+
+                  <!-- D22 -->
+                  <circle cx="395" cy="233" r="3.8" fill="#475569" />
+                  <text x="405" y="236" fill="#94a3b8">D22</text>
+
+                  <!-- D19 (MISO) -->
+                  <circle cx="395" cy="265" r="4.5" fill="#3b82f6" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="405" y="268" fill="#93c5fd">D19</text>
+
+                  <!-- D18 (SCK) -->
+                  <circle cx="395" cy="297" r="4.5" fill="#f59e0b" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="405" y="300" fill="#fcd34d">D18</text>
+
+                  <!-- D5 (CS) -->
+                  <circle cx="395" cy="329" r="4.5" fill="#a855f7" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="405" y="332" fill="#d8b4fe">D5</text>
+
+                  <!-- D4 (Button) -->
+                  <circle cx="395" cy="361" r="4.5" fill="#06b6d4" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="405" y="364" fill="#67e8f9">D4</text>
+
+                  <!-- D2 -->
+                  <circle cx="395" cy="393" r="3.8" fill="#475569" />
+                  <text x="405" y="396" fill="#94a3b8">D2</text>
+
+                  <!-- D13 -->
+                  <circle cx="395" cy="425" r="3.8" fill="#475569" />
+                  <text x="405" y="428" fill="#94a3b8">D13</text>
+
+                  <!-- D12 -->
+                  <circle cx="395" cy="457" r="3.8" fill="#475569" />
+                  <text x="405" y="460" fill="#94a3b8">D12</text>
+
+                  <!-- D14 -->
+                  <circle cx="395" cy="489" r="3.8" fill="#475569" />
+                  <text x="405" y="492" fill="#94a3b8">D14</text>
+
+                  <!-- D27 -->
+                  <circle cx="395" cy="521" r="3.8" fill="#475569" />
+                  <text x="405" y="524" fill="#94a3b8">D27</text>
+
+                  <!-- GND #2 -->
+                  <circle cx="395" cy="553" r="4.5" fill="#64748b" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="405" y="556" fill="#cbd5e1">GND</text>
+                </g>
+
+                <!-- Right Side Pins (15 Pins: VIN, GND #3, Silkscreen Labels) -->
+                <g font-family="JetBrains Mono" font-size="9.5" font-weight="600" text-anchor="end">
+                  <!-- VIN -->
+                  <circle cx="565" cy="105" r="4.5" fill="#f97316" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="555" y="108" fill="#fdba74">VIN</text>
+
+                  <!-- CMD -->
+                  <circle cx="565" cy="137" r="3.8" fill="#475569" />
+                  <text x="555" y="140" fill="#94a3b8">CMD</text>
+
+                  <!-- CLK -->
+                  <circle cx="565" cy="169" r="3.8" fill="#475569" />
+                  <text x="555" y="172" fill="#94a3b8">CLK</text>
+
+                  <!-- SD0 -->
+                  <circle cx="565" cy="200" r="3.8" fill="#475569" />
+                  <text x="555" y="203" fill="#94a3b8">SD0</text>
+
+                  <!-- SD1 -->
+                  <circle cx="565" cy="233" r="3.8" fill="#475569" />
+                  <text x="555" y="236" fill="#94a3b8">SD1</text>
+
+                  <!-- SD2 -->
+                  <circle cx="565" cy="265" r="3.8" fill="#475569" />
+                  <text x="555" y="268" fill="#94a3b8">SD2</text>
+
+                  <!-- SD3 -->
+                  <circle cx="565" cy="297" r="3.8" fill="#475569" />
+                  <text x="555" y="300" fill="#94a3b8">SD3</text>
+
+                  <!-- D21 -->
+                  <circle cx="565" cy="329" r="3.8" fill="#475569" />
+                  <text x="555" y="332" fill="#94a3b8">D21</text>
+
+                  <!-- D25 (I2S WS) -->
+                  <circle cx="565" cy="361" r="4.5" fill="#ec4899" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="555" y="364" fill="#f9a8d4">D25</text>
+
+                  <!-- D26 (I2S SCK) -->
+                  <circle cx="565" cy="393" r="4.5" fill="#f97316" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="555" y="396" fill="#fdba74">D26</text>
+
+                  <!-- RX2 -->
+                  <circle cx="565" cy="425" r="3.8" fill="#475569" />
+                  <text x="555" y="428" fill="#94a3b8">RX2</text>
+
+                  <!-- D33 (I2S SD) -->
+                  <circle cx="565" cy="457" r="4.5" fill="#14b8a6" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="555" y="460" fill="#5eead4">D33</text>
+
+                  <!-- TX2 -->
+                  <circle cx="565" cy="489" r="3.8" fill="#475569" />
+                  <text x="555" y="492" fill="#94a3b8">TX2</text>
+
+                  <!-- RX0 / TX0 -->
+                  <circle cx="565" cy="521" r="3.8" fill="#475569" />
+                  <text x="555" y="524" fill="#94a3b8">RX0/TX0</text>
+
+                  <!-- GND #3 -->
+                  <circle cx="565" cy="553" r="4.5" fill="#64748b" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="555" y="556" fill="#cbd5e1">GND</text>
+                </g>
+              </g>
+
+              <!-- ======================================================= -->
+              <!-- MODULE 2: MICROSD CARD MODULE (TOP LEFT)                -->
+              <!-- ======================================================= -->
+              <g id="mod-sdcard" class="module-box" onclick="selectModule('sdcard')">
+                <rect x="45" y="65" width="195" height="235" rx="12" fill="#1e3a8a" stroke="#3b82f6" stroke-width="2" />
+                <!-- Metal SD Card Slot -->
+                <rect x="58" y="88" width="90" height="115" rx="4" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.5" />
+                <text x="103" y="140" text-anchor="middle" fill="#1e293b" font-family="Inter" font-size="11" font-weight="700">MicroSD</text>
+                <text x="103" y="155" text-anchor="middle" fill="#475569" font-family="JetBrains Mono" font-size="9">FAT32 Slot</text>
+                
+                <!-- Module Title -->
+                <text x="142" y="235" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="12" font-weight="700">MicroSD Module</text>
+                <text x="142" y="252" text-anchor="middle" fill="#93c5fd" font-family="JetBrains Mono" font-size="9.5">SPI Interface (VSPI)</text>
+                <rect x="65" y="264" width="154" height="22" rx="5" fill="#172554" />
+                <text x="142" y="278" text-anchor="middle" fill="#fde047" font-family="JetBrains Mono" font-size="8.5">*Use 5V VIN if 3.3V LDO fitted</text>
+
+                <!-- Right Pins of MicroSD Module -->
+                <g font-family="JetBrains Mono" font-size="10.5" font-weight="600" text-anchor="end">
+                  <circle cx="240" cy="120" r="4.5" fill="#ef4444" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="229" y="124" fill="#fca5a5">VCC</text>
+
+                  <circle cx="240" cy="150" r="4.5" fill="#64748b" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="229" y="154" fill="#cbd5e1">GND</text>
+
+                  <circle cx="240" cy="180" r="4.5" fill="#3b82f6" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="229" y="184" fill="#93c5fd">MISO</text>
+
+                  <circle cx="240" cy="210" r="4.5" fill="#10b981" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="229" y="214" fill="#6ee7b7">MOSI</text>
+
+                  <circle cx="240" cy="240" r="4.5" fill="#f59e0b" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="229" y="244" fill="#fcd34d">SCK</text>
+
+                  <circle cx="240" cy="270" r="4.5" fill="#a855f7" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="229" y="274" fill="#d8b4fe">CS</text>
+                </g>
+              </g>
+
+              <!-- ======================================================= -->
+              <!-- MODULE 3: PUSH BUTTON (BOTTOM LEFT)                     -->
+              <!-- ======================================================= -->
+              <g id="mod-button" class="module-box" onclick="selectModule('button')">
+                <rect x="45" y="405" width="195" height="145" rx="12" fill="#0f172a" stroke="#06b6d4" stroke-width="2" />
+                
+                <!-- Tactile Switch Visual -->
+                <rect x="92" y="425" width="60" height="60" rx="8" fill="#334155" stroke="#64748b" stroke-width="1.5" />
+                <circle cx="122" cy="455" r="18" fill="#06b6d4" stroke="#cffafe" stroke-width="2" />
+                <circle cx="122" cy="455" r="8" fill="#0e7490" />
+
+                <text x="142" y="512" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="12" font-weight="700">Tactile Push Button</text>
+                <text x="142" y="529" text-anchor="middle" fill="#67e8f9" font-family="JetBrains Mono" font-size="9.5">Record / Stop Toggle</text>
+
+                <!-- Right Pins of Push Button -->
+                <g font-family="JetBrains Mono" font-size="10.5" font-weight="600" text-anchor="end">
+                  <circle cx="240" cy="465" r="4.5" fill="#06b6d4" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="229" y="469" fill="#67e8f9">PIN 1</text>
+
+                  <circle cx="240" cy="505" r="4.5" fill="#64748b" stroke="#fff" stroke-width="1.2" class="pin-dot" />
+                  <text x="229" y="509" fill="#cbd5e1">PIN 2</text>
+                </g>
+              </g>
+
+              <!-- ======================================================= -->
+              <!-- MODULE 4: INMP441 I2S MICROPHONE (TOP RIGHT)            -->
+              <!-- ======================================================= -->
+              <g id="mod-mic" class="module-box" onclick="selectModule('mic')">
+                <rect x="720" y="95" width="195" height="235" rx="12" fill="#31102f" stroke="#ec4899" stroke-width="2" />
+                
+                <!-- Gold Acoustic MEMS Port -->
+                <circle cx="848" cy="175" r="26" fill="#eab308" stroke="#fef08a" stroke-width="2" />
+                <circle cx="848" cy="175" r="15" fill="#ca8a04" />
+                <circle cx="848" cy="175" r="5" fill="#0f172a" />
+                <text x="848" y="214" text-anchor="middle" fill="#fde047" font-family="JetBrains Mono" font-size="8.5">MEMS Port</text>
+
+                <text x="818" y="268" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="12" font-weight="700">INMP441 Mic</text>
+                <text x="818" y="285" text-anchor="middle" fill="#f9a8d4" font-family="JetBrains Mono" font-size="9.5">Omnidirectional I2S</text>
+                <rect x="742" y="296" width="152" height="22" rx="5" fill="#500724" />
+                <text x="818" y="310" text-anchor="middle" fill="#fbcfe8" font-family="JetBrains Mono" font-size="8.5">L/R → GND (Left Ch)</text>
+
+                <!-- Legend Box -->
+                <rect width="265" height="175" rx="12" fill="#0f172a" fill-opacity="0.88" stroke="#334155" stroke-width="1.5" />
+                <text x="16" y="26" fill="#f8fafc" font-family="Inter" font-size="11.5" font-weight="700">Wire Color &amp; Bus Legend</text>
+                
+                <line x1="16" y1="46" x2="42" y2="46" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />
+                <text x="52" y="50" fill="#cbd5e1" font-family="Inter" font-size="10.5">Shared 3V3 Rail (1× 3V3 Pin)</text>
+
+                <line x1="16" y1="68" x2="42" y2="68" stroke="#64748b" stroke-width="3" stroke-linecap="round" />
+                <text x="52" y="72" fill="#cbd5e1" font-family="Inter" font-size="10.5">Common Ground (Multiple GND)</text>
+
+                <line x1="16" y1="90" x2="42" y2="90" stroke="#10b981" stroke-width="3" stroke-linecap="round" />
+                <text x="52" y="94" fill="#cbd5e1" font-family="Inter" font-size="10.5">SPI Bus (D23, D19, D18, D5)</text>
+
+                <line x1="16" y1="112" x2="42" y2="112" stroke="#ec4899" stroke-width="3" stroke-linecap="round" />
+                <text x="52" y="116" fill="#cbd5e1" font-family="Inter" font-size="10.5">I2S Audio Bus (D25, D26, D33)</text>
+
+                <line x1="16" y1="134" x2="42" y2="134" stroke="#06b6d4" stroke-width="3" stroke-linecap="round" />
+                <text x="52" y="138" fill="#cbd5e1" font-family="Inter" font-size="10.5">D4 Button (INPUT_PULLUP → GND)</text>
+
+                <text x="16" y="160" fill="#94a3b8" font-family="JetBrains Mono" font-size="9">Tip: Click a module card for specs</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Inspector & Pinout Reference Panel (4 cols on desktop) -->
+        <div class="lg:col-span-4 space-y-5">
+          <!-- Live Wire/Module Inspector Card -->
+          <div id="inspector-card" class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm transition-all">
+            <div class="flex items-center justify-between mb-3">
+              <span id="inspector-badge" class="px-2.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                Connection Inspector
+              </span>
+              <span class="text-xs font-mono text-slate-400">Interactive</span>
+            </div>
+            <h2 id="inspector-title" class="text-base font-bold text-slate-900 dark:text-white mb-1.5">
+              Hover or Click Any Wire
+            </h2>
+            <p id="inspector-subtitle" class="text-xs font-mono text-blue-600 dark:text-blue-400 mb-3">
+              Protocol &amp; Voltage Level
+            </p>
+            <p id="inspector-desc" class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+              Move your cursor over any colored wire or tap a hardware module on the schematic to view its exact D-label / GPIO pin assignment, electrical behavior, and role in the recording pipeline.
+            </p>
+          </div>
+
+          <!-- Shared Power Bus Note -->
+          <div class="bg-amber-500/10 dark:bg-amber-500/10 rounded-2xl border border-amber-500/30 p-4 shadow-sm">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1.5">
+              Power Bus Note (1× 3V3 &amp; Multiple GND)
+            </h3>
+            <p class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+              Your ESP32 DevKit provides <strong>one 3V3 pin</strong> and <strong>multiple GND pins</strong> (all tied together internally). Route <span class="font-mono font-semibold">3V3</span> to a breadboard power rail to feed both the <strong>INMP441 VDD</strong> and <strong>MicroSD VCC</strong> (use <span class="font-mono font-semibold">VIN</span> if your SD board has a 3.3V regulator), and tie all <span class="font-mono font-semibold">GND</span> pins together with the <strong>Push Button</strong> (<span class="font-mono font-semibold">INPUT_PULLUP</span> on <span class="font-mono font-semibold">D4</span> to <span class="font-mono font-semibold">GND</span>).
+            </p>
+          </div>
+
+          <!-- Quick Pinout Mapping Table -->
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+            <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Complete Pinout Cheat Sheet (D-Labels)</h3>
+            </div>
+            <div class="divide-y divide-slate-100 dark:divide-slate-800 text-xs max-h-[300px] overflow-y-auto">
+              <!-- MicroSD Section -->
+              <div class="px-4 py-2 bg-blue-500/5 font-semibold text-blue-600 dark:text-blue-400">MicroSD Card Module (VSPI)</div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-sd-vcc')">
+                <span class="font-mono font-medium">VCC</span><span class="text-slate-500">→</span><span class="font-mono text-red-500 font-semibold">3V3 (or VIN*)</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-sd-gnd')">
+                <span class="font-mono font-medium">GND</span><span class="text-slate-500">→</span><span class="font-mono font-semibold">GND</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-sd-mosi')">
+                <span class="font-mono font-medium">MOSI</span><span class="text-slate-500">→</span><span class="font-mono text-emerald-500 font-semibold">D23 (GPIO23)</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-sd-miso')">
+                <span class="font-mono font-medium">MISO</span><span class="text-slate-500">→</span><span class="font-mono text-blue-500 font-semibold">D19 (GPIO19)</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-sd-sck')">
+                <span class="font-mono font-medium">SCK</span><span class="text-slate-500">→</span><span class="font-mono text-amber-500 font-semibold">D18 (GPIO18)</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-sd-cs')">
+                <span class="font-mono font-medium">CS</span><span class="text-slate-500">→</span><span class="font-mono text-purple-500 font-semibold">D5 (GPIO5)</span>
+              </div>
+
+              <!-- INMP441 Section -->
+              <div class="px-4 py-2 bg-pink-500/5 font-semibold text-pink-600 dark:text-pink-400">INMP441 I2S Microphone</div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-mic-vdd')">
+                <span class="font-mono font-medium">VDD</span><span class="text-slate-500">→</span><span class="font-mono text-red-500 font-semibold">3V3 (Shared Rail)</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-mic-gnd')">
+                <span class="font-mono font-medium">GND &amp; L/R</span><span class="text-slate-500">→</span><span class="font-mono font-semibold">GND (Left Ch)</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-mic-ws')">
+                <span class="font-mono font-medium">WS (LRC)</span><span class="text-slate-500">→</span><span class="font-mono text-pink-500 font-semibold">D25 (GPIO25)</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-mic-sck')">
+                <span class="font-mono font-medium">SCK (BCLK)</span><span class="text-slate-500">→</span><span class="font-mono text-orange-500 font-semibold">D26 (GPIO26)</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-mic-sd')">
+                <span class="font-mono font-medium">SD (Data)</span><span class="text-slate-500">→</span><span class="font-mono text-teal-500 font-semibold">D33 (GPIO33)</span>
+              </div>
+
+              <!-- Button Section -->
+              <div class="px-4 py-2 bg-cyan-500/5 font-semibold text-cyan-600 dark:text-cyan-400">Push Button (Toggle)</div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-btn-gpio')">
+                <span class="font-mono font-medium">Pin 1</span><span class="text-slate-500">→</span><span class="font-mono text-cyan-500 font-semibold">D4 (GPIO4 PULLUP)</span>
+              </div>
+              <div class="px-4 py-2 flex justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer" onclick="highlightWire('wire-btn-gnd')">
+                <span class="font-mono font-medium">Pin 2</span><span class="text-slate-500">→</span><span class="font-mono font-semibold">GND</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Silkscreen D-Pin to GPIO Reference Table -->
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+            <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Silkscreen D-Label → GPIO Mapping</h3>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-3 text-[11px] font-mono">
+              <div class="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 flex justify-between"><span class="font-semibold text-blue-500">D2</span><span class="text-slate-500 dark:text-slate-400">GPIO2</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex justify-between"><span class="font-semibold text-cyan-600 dark:text-cyan-400">D4</span><span class="text-slate-600 dark:text-slate-300">GPIO4</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 flex justify-between"><span class="font-semibold text-purple-600 dark:text-purple-400">D5</span><span class="text-slate-600 dark:text-slate-300">GPIO5</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 flex justify-between"><span class="font-semibold text-blue-500">D12</span><span class="text-slate-500 dark:text-slate-400">GPIO12</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 flex justify-between"><span class="font-semibold text-blue-500">D13</span><span class="text-slate-500 dark:text-slate-400">GPIO13</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 flex justify-between"><span class="font-semibold text-blue-500">D14</span><span class="text-slate-500 dark:text-slate-400">GPIO14</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 flex justify-between"><span class="font-semibold text-blue-500">D15</span><span class="text-slate-500 dark:text-slate-400">GPIO15</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 flex justify-between"><span class="font-semibold text-amber-600 dark:text-amber-400">D18</span><span class="text-slate-600 dark:text-slate-300">GPIO18</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 flex justify-between"><span class="font-semibold text-blue-600 dark:text-blue-400">D19</span><span class="text-slate-600 dark:text-slate-300">GPIO19</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 flex justify-between"><span class="font-semibold text-blue-500">D21</span><span class="text-slate-500 dark:text-slate-400">GPIO21</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/70 flex justify-between"><span class="font-semibold text-blue-500">D22</span><span class="text-slate-500 dark:text-slate-400">GPIO22</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex justify-between"><span class="font-semibold text-emerald-600 dark:text-emerald-400">D23</span><span class="text-slate-600 dark:text-slate-300">GPIO23</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-pink-500/10 border border-pink-500/20 flex justify-between"><span class="font-semibold text-pink-600 dark:text-pink-400">D25</span><span class="text-slate-600 dark:text-slate-300">GPIO25</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 flex justify-between"><span class="font-semibold text-orange-600 dark:text-orange-400">D26</span><span class="text-slate-600 dark:text-slate-300">GPIO26</span></div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-teal-500/10 border border-teal-500/20 flex justify-between"><span class="font-semibold text-teal-600 dark:text-teal-400">D33</span><span class="text-slate-600 dark:text-slate-300">GPIO33</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <!-- VIEW 2: SYSTEM LOGIC / STATE MACHINE FLOWCHART            -->
+    <!-- ========================================================= -->
+    <section id="view-flow" class="hidden space-y-6">
+      <!-- Interactive State Machine Simulator Bar -->
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            Interactive Firmware State Machine
+            <span id="sim-status-badge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              STATE: IDLE
+            </span>
+          </h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Click the simulated physical push button below to step through the ESP32 recording lifecycle.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div id="sim-timer" class="font-mono text-sm px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+            00:00.0
+          </div>
+          <button id="sim-push-btn" onclick="triggerSimulatedButton()" class="px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 active:scale-95 text-white shadow-md shadow-blue-500/20 transition-all flex items-center gap-2">
+            <span id="sim-btn-dot" class="w-2.5 h-2.5 rounded-full bg-white"></span>
+            <span id="sim-btn-text">Press Push Button (Start Recording)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Visual Flowchart SVG -->
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 sm:p-6 shadow-sm overflow-x-auto">
+        <svg viewBox="0 0 920 680" class="w-full h-auto min-w-[680px] select-none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow-slate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" />
+            </marker>
+            <marker id="arrow-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#10b981" />
+            </marker>
+            <marker id="arrow-rose" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#f43f5e" />
+            </marker>
+          </defs>
+
+          <!-- STEP 1: START / BOOT -->
+          <g id="flow-boot">
+            <rect x="330" y="20" width="260" height="54" rx="27" fill="#1e293b" stroke="#3b82f6" stroke-width="2" />
+            <text x="460" y="44" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="13" font-weight="700">1. ESP32 Power On / Boot</text>
+            <text x="460" y="61" text-anchor="middle" fill="#93c5fd" font-family="JetBrains Mono" font-size="10">setup() Entry</text>
+          </g>
+
+          <!-- Arrow Boot -> Init -->
+          <line x1="460" y1="74" x2="460" y2="108" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)" />
+
+          <!-- STEP 2: INITIALIZATION -->
+          <g id="flow-init">
+            <rect x="275" y="112" width="370" height="76" rx="12" fill="#0f172a" stroke="#6366f1" stroke-width="2" />
+            <text x="460" y="136" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="13" font-weight="700">2. Initialize Peripherals</text>
+            <text x="460" y="156" text-anchor="middle" fill="#cbd5e1" font-family="JetBrains Mono" font-size="10.5">• pinMode(D4 / GPIO4, INPUT_PULLUP)</text>
+            <text x="460" y="173" text-anchor="middle" fill="#cbd5e1" font-family="JetBrains Mono" font-size="10.5">• SD.begin(CS=D5 / GPIO5) &amp; i2s_driver_install()</text>
+          </g>
+
+          <!-- Arrow Init -> IDLE -->
+          <line x1="460" y1="188" x2="460" y2="226" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrow-emerald)" />
+
+          <!-- STEP 3: STATE IDLE -->
+          <g id="flow-idle">
+            <rect id="box-idle" x="300" y="230" width="320" height="74" rx="14" fill="#064e3b" stroke="#10b981" stroke-width="3" />
+            <text x="460" y="256" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="14" font-weight="700">STATE: IDLE (Ready)</text>
+            <text x="460" y="276" text-anchor="middle" fill="#a7f3d0" font-family="JetBrains Mono" font-size="10.5">Poll D4 (GPIO4) • Status LED OFF</text>
+            <text x="460" y="292" text-anchor="middle" fill="#6ee7b7" font-family="JetBrains Mono" font-size="9.5">Waiting for Falling Edge (HIGH → LOW to GND)</text>
+          </g>
+
+          <!-- Arrow IDLE -> Decision 1 -->
+          <line x1="460" y1="304" x2="460" y2="338" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)" />
+
+          <!-- DECISION 1: BUTTON PRESSED? -->
+          <g id="flow-dec1">
+            <polygon points="460,342 585,392 460,442 335,392" fill="#1e293b" stroke="#06b6d4" stroke-width="2" />
+            <text x="460" y="388" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="12" font-weight="700">Button Pressed?</text>
+            <text x="460" y="405" text-anchor="middle" fill="#67e8f9" font-family="JetBrains Mono" font-size="9.5">(Debounced 50ms)</text>
+          </g>
+
+          <!-- Loop NO back to IDLE -->
+          <path d="M 335 392 L 245 392 L 245 267 L 296 267" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arrow-slate)" />
+          <text x="275" y="384" fill="#94a3b8" font-family="JetBrains Mono" font-size="10.5" font-weight="700">NO</text>
+
+          <!-- Arrow YES -> RECORDING -->
+          <line x1="460" y1="442" x2="460" y2="482" stroke="#f43f5e" stroke-width="2.5" marker-end="url(#arrow-rose)" />
+          <text x="472" y="466" fill="#fb7185" font-family="JetBrains Mono" font-size="10.5" font-weight="700">YES (Toggle ON)</text>
+
+          <!-- STEP 4: STATE RECORDING -->
+          <g id="flow-rec">
+            <rect id="box-rec" x="260" y="486" width="400" height="96" rx="14" fill="#1e293b" stroke="#64748b" stroke-width="2.5" />
+            <text x="460" y="512" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="14" font-weight="700">STATE: RECORDING (/rec_001.wav)</text>
+            <text x="460" y="533" text-anchor="middle" fill="#fecdd3" font-family="JetBrains Mono" font-size="10.5">1. Open file &amp; write 44-byte placeholder WAV header</text>
+            <text x="460" y="550" text-anchor="middle" fill="#fecdd3" font-family="JetBrains Mono" font-size="10.5">2. Read DMA buffer via i2s_read() (16kHz, 16-bit)</text>
+            <text x="460" y="567" text-anchor="middle" fill="#fecdd3" font-family="JetBrains Mono" font-size="10.5">3. Stream PCM audio chunks to SD via file.write()</text>
+          </g>
+
+          <!-- Arrow RECORDING -> Decision 2 (Right Side) -->
+          <path d="M 660 534 L 745 534 L 745 435" fill="none" stroke="#f43f5e" stroke-width="2.5" marker-end="url(#arrow-rose)" />
+
+          <!-- DECISION 2: BUTTON PRESSED AGAIN? -->
+          <g id="flow-dec2">
+            <polygon points="745,332 865,382 745,432 625,382" fill="#1e293b" stroke="#f59e0b" stroke-width="2" />
+            <text x="745" y="378" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="11.5" font-weight="700">Pressed Again?</text>
+            <text x="745" y="395" text-anchor="middle" fill="#fcd34d" font-family="JetBrains Mono" font-size="9.5">(Stop Trigger)</text>
+          </g>
+
+          <!-- Loop NO back to keep streaming audio -->
+          <path d="M 865 382 L 895 382 L 895 555 L 664 555" fill="none" stroke="#f43f5e" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arrow-rose)" />
+          <text x="875" y="374" fill="#fb7185" font-family="JetBrains Mono" font-size="10" font-weight="700">NO</text>
+          <text x="888" y="475" fill="#fb7185" font-family="JetBrains Mono" font-size="9" transform="rotate(90 888 475)">Continue Streaming</text>
+
+          <!-- STEP 5: FINALIZE WAV & RETURN TO IDLE -->
+          <g id="flow-save">
+            <rect id="box-save" x="625" y="210" width="245" height="76" rx="12" fill="#0f172a" stroke="#f59e0b" stroke-width="2" />
+            <text x="747" y="234" text-anchor="middle" fill="#ffffff" font-family="Inter" font-size="12.5" font-weight="700">Finalize &amp; Save .WAV</text>
+            <text x="747" y="253" text-anchor="middle" fill="#fde68a" font-family="JetBrains Mono" font-size="9.5">• Seek(0) &amp; update data size</text>
+            <text x="747" y="269" text-anchor="middle" fill="#fde68a" font-family="JetBrains Mono" font-size="9.5">• file.close() safely</text>
+          </g>
+
+          <!-- Arrow Decision 2 YES -> Finalize -->
+          <line x1="745" y1="332" x2="745" y2="290" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrow-emerald)" />
+          <text x="755" y="315" fill="#34d399" font-family="JetBrains Mono" font-size="10.5" font-weight="700">YES</text>
+
+          <!-- Arrow Finalize -> IDLE -->
+          <path d="M 625 248 L 624 248" fill="none" />
+          <line x1="625" y1="255" x2="620" y2="255" stroke="#10b981" stroke-width="2.5" />
+          <path d="M 625 255 L 620 255" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrow-emerald)" />
+        </svg>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <!-- VIEW 3: REFERENCE ARDUINO C++ CODE                        -->
+    <!-- ========================================================= -->
+    <section id="view-code" class="hidden space-y-4">
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+        <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">esp32_button_wav_recorder.ino</span>
+            <span class="text-xs text-slate-400">• Arduino IDE / PlatformIO</span>
+          </div>
+          <button onclick="copyFirmwareCode()" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            <span id="copy-code-label">Copy Firmware Code</span>
+          </button>
+        </div>
+
+        <pre class="p-4 sm:p-5 overflow-x-auto text-xs sm:text-[13px] font-mono leading-relaxed text-slate-800 dark:text-slate-200 bg-slate-50/60 dark:bg-[#0b1120]"><code id="arduino-code-block">#include &lt;Arduino.h&gt;
+#include &lt;SPI.h&gt;
+#include &lt;SD.h&gt;
+#include &lt;driver/i2s.h&gt;
+
+// ==========================================
+// 1. PIN DEFINITIONS (Matches Wiring Chart)
+// ==========================================
+// Push Button (Toggle Record / Stop) -&gt; Silkscreen D4 (GPIO4) to GND
+#define BUTTON_PIN      4   // D4
+
+// MicroSD Card Module (VSPI) -&gt; Silkscreen D5, D23, D19, D18
+#define SD_CS_PIN       5   // D5
+#define SD_MOSI_PIN     23  // D23
+#define SD_MISO_PIN     19  // D19
+#define SD_SCK_PIN      18  // D18
+
+// INMP441 I2S Microphone -&gt; Silkscreen D25, D26, D33
+#define I2S_WS_PIN      25  // D25
+#define I2S_SCK_PIN     26  // D26
+#define I2S_SD_PIN      33  // D33
+#define I2S_PORT        I2S_NUM_0
+
+// Audio Sampling Configuration
+#define SAMPLE_RATE     16000
+#define BITS_PER_SAMPLE 16
+#define CHANNELS        1
+
+File audioFile;
+bool isRecording = false;
+uint32_t dataBytesWritten = 0;
+int fileIndex = 1;
+
+// Debounce variables
+int lastButtonState = HIGH;
+int stableButtonState = HIGH;
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;
+
+void writeWavHeader(File &amp;file, uint32_t sampleRate, uint16_t bitsPerSample, uint16_t channels, uint32_t dataSize) {
+  uint32_t byteRate = sampleRate * channels * (bitsPerSample / 8);
+  uint16_t blockAlign = channels * (bitsPerSample / 8);
+  uint32_t chunkSize = 36 + dataSize;
+
+  uint8_t header[44] = {
+    'R','I','F','F',
+    (uint8_t)(chunkSize &amp; 0xFF), (uint8_t)((chunkSize &gt;&gt; 8) &amp; 0xFF), (uint8_t)((chunkSize &gt;&gt; 16) &amp; 0xFF), (uint8_t)((chunkSize &gt;&gt; 24) &amp; 0xFF),
+    'W','A','V','E',
+    'f','m','t',' ',
+    16, 0, 0, 0,
+    1, 0,
+    (uint8_t)(channels &amp; 0xFF), (uint8_t)((channels &gt;&gt; 8) &amp; 0xFF),
+    (uint8_t)(sampleRate &amp; 0xFF), (uint8_t)((sampleRate &gt;&gt; 8) &amp; 0xFF), (uint8_t)((sampleRate &gt;&gt; 16) &amp; 0xFF), (uint8_t)((sampleRate &gt;&gt; 24) &amp; 0xFF),
+    (uint8_t)(byteRate &amp; 0xFF), (uint8_t)((byteRate &gt;&gt; 8) &amp; 0xFF), (uint8_t)((byteRate &gt;&gt; 16) &amp; 0xFF), (uint8_t)((byteRate &gt;&gt; 24) &amp; 0xFF),
+    (uint8_t)(blockAlign &amp; 0xFF), (uint8_t)((blockAlign &gt;&gt; 8) &amp; 0xFF),
+    (uint8_t)(bitsPerSample &amp; 0xFF), (uint8_t)((bitsPerSample &gt;&gt; 8) &amp; 0xFF),
+    'd','a','t','a',
+    (uint8_t)(dataSize &amp; 0xFF), (uint8_t)((dataSize &gt;&gt; 8) &amp; 0xFF), (uint8_t)((dataSize &gt;&gt; 16) &amp; 0xFF), (uint8_t)((dataSize &gt;&gt; 24) &amp; 0xFF)
+  };
+
+  file.seek(0);
+  file.write(header, 44);
+}
+
+void setupI2S() {
+  i2s_config_t i2s_config = {
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
+    .sample_rate = SAMPLE_RATE,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+    .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+    .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 8,
+    .dma_buf_len = 256,
+    .use_apll = false,
+    .tx_desc_auto_clear = false,
+    .fixed_mclk = 0
+  };
+
+  i2s_pin_config_t pin_config = {
+    .bck_io_num = I2S_SCK_PIN,
+    .ws_io_num = I2S_WS_PIN,
+    .data_out_num = I2S_PIN_NO_CHANGE,
+    .data_in_num = I2S_SD_PIN
+  };
+
+  i2s_driver_install(I2S_PORT, &amp;i2s_config, 0, NULL);
+  i2s_set_pin(I2S_PORT, &amp;pin_config);
+}
+
+void startRecording() {
+  char filename[24];
+  while (true) {
+    snprintf(filename, sizeof(filename), "/rec_%03d.wav", fileIndex++);
+    if (!SD.exists(filename)) break;
+  }
+
+  audioFile = SD.open(filename, FILE_WRITE);
+  if (!audioFile) {
+    Serial.println("ERROR: Could not open file on SD card.");
+    return;
+  }
+
+  uint8_t emptyHeader[44] = {0};
+  audioFile.write(emptyHeader, 44);
+  dataBytesWritten = 0;
+  isRecording = true;
+  Serial.print("Recording started: ");
+  Serial.println(filename);
+}
+
+void stopRecording() {
+  if (!isRecording) return;
+  isRecording = false;
+  writeWavHeader(audioFile, SAMPLE_RATE, BITS_PER_SAMPLE, CHANNELS, dataBytesWritten);
+  audioFile.flush();
+  audioFile.close();
+  Serial.print("Recording saved. Total bytes: ");
+  Serial.println(dataBytesWritten);
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
+  if (!SD.begin(SD_CS_PIN)) {
+    Serial.println("ERROR: SD Card Mount Failed! Check wiring.");
+  } else {
+    Serial.println("SD Card initialized.");
+  }
+
+  setupI2S();
+  Serial.println("System Ready. Press button on D4 (GPIO4) to record.");
+}
+
+void loop() {
+  int reading = digitalRead(BUTTON_PIN);
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) &gt; debounceDelay) {
+    if (reading != stableButtonState) {
+      stableButtonState = reading;
+      if (stableButtonState == LOW) {
+        if (!isRecording) startRecording();
+        else stopRecording();
+      }
+    }
+  }
+  lastButtonState = reading;
+
+  if (isRecording &amp;&amp; audioFile) {
+    int32_t rawSamples[256];
+    size_t bytesRead = 0;
+    i2s_read(I2S_PORT, &amp;rawSamples, sizeof(rawSamples), &amp;bytesRead, portMAX_DELAY);
+
+    int sampleCount = bytesRead / sizeof(int32_t);
+    int16_t pcm16[256];
+    for (int i = 0; i &lt; sampleCount; i++) {
+      pcm16[i] = (int16_t)(rawSamples[i] &gt;&gt; 16);
+    }
+
+    size_t outBytes = sampleCount * sizeof(int16_t);
+    audioFile.write((uint8_t*)pcm16, outBytes);
+    dataBytesWritten += outBytes;
+  }
+}</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast Notification Banner -->
+  <div id="toast-msg" class="fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-medium shadow-lg border border-slate-700 opacity-0 pointer-events-none transition-opacity duration-200">
+    Copied to clipboard!
+  </div>
+
+  <script>
+    // =========================================================
+    // 1. TAB NAVIGATION & THEME TOGGLING
+    // =========================================================
+    function switchTab(tabName) {
+      const views = ['wiring', 'flow', 'code'];
+      views.forEach(v => {
+        const el = document.getElementById('view-' + v);
+        const btn = document.getElementById('tab-btn-' + v);
+        if (el) el.classList.toggle('hidden', v !== tabName);
+        if (btn) {
+          if (v === tabName) {
+            btn.classList.add('bg-white', 'dark:bg-slate-700', 'text-blue-600', 'dark:text-blue-400', 'shadow-sm');
+            btn.classList.remove('text-slate-600', 'dark:text-slate-300');
+          } else {
+            btn.classList.remove('bg-white', 'dark:bg-slate-700', 'text-blue-600', 'dark:text-blue-400', 'shadow-sm');
+            btn.classList.add('text-slate-600', 'dark:text-slate-300');
+          }
+        }
+      });
+    }
+
+    function toggleTheme() {
+      document.documentElement.classList.toggle('dark');
+    }
+
+    // =========================================================
+    // 2. INTERACTIVE WIRING & MODULE INSPECTOR
+    // =========================================================
+    const moduleDetails = {
+      esp32: {
+        badge: 'MICROCONTROLLER',
+        title: 'ESP32 DevKit (30-Pin D-Silkscreen Layout)',
+        subtitle: '1× 3V3 Pin • 3× GND Pins • D-Labels (D2–D33)',
+        desc: 'Features one 3V3 output and multiple GND pins tied internally to common ground. Silkscreen labels like D12, D13, D4, D5, D18, D19, and D23 map directly to their internal ESP32 GPIO numbers.'
+      },
+      sdcard: {
+        badge: 'STORAGE MODULE',
+        title: 'MicroSD Card Breakout (SPI)',
+        subtitle: 'VSPI Bus (D23, D19, D18, D5) • FAT32 Format',
+        desc: 'Stores recorded uncompressed PCM .WAV files. Share the ESP32 3V3 pin (or VIN if your SD breakout has a 3.3V regulator) and connect GND to any available GND pin.'
+      },
+      mic: {
+        badge: 'AUDIO SENSOR',
+        title: 'INMP441 Omnidirectional I2S Microphone',
+        subtitle: '24-Bit Digital MEMS • D25, D26, D33 • L/R Tied to GND',
+        desc: 'Powered from the shared 3V3 rail (3.3V max) and grounded to any GND pin. Tying L/R to GND selects the Left channel.'
+      },
+      button: {
+        badge: 'USER CONTROL',
+        title: 'Tactile Push Button (Toggle Switch)',
+        subtitle: 'D4 (GPIO4 INPUT_PULLUP) ↔ GND',
+        desc: 'Uses the internal pull-up resistor on D4 (GPIO4) so no external resistor is required. Pressing once starts recording; pressing again stops and saves the .WAV file.'
+      }
+    };
+
+    function updateInspector(badge, title, subtitle, desc) {
+      const badgeEl = document.getElementById('inspector-badge');
+      const titleEl = document.getElementById('inspector-title');
+      const subEl = document.getElementById('inspector-subtitle');
+      const descEl = document.getElementById('inspector-desc');
+
+      if (badgeEl) badgeEl.textContent = badge;
+      if (titleEl) titleEl.textContent = title;
+      if (subEl) subEl.textContent = subtitle;
+      if (descEl) descEl.textContent = desc;
+    }
+
+    function selectModule(modKey) {
+      const info = moduleDetails[modKey];
+      if (!info) return;
+      updateInspector(info.badge, info.title, info.subtitle, info.desc);
+    }
+
+    function highlightWire(wireId) {
+      const allWires = document.querySelectorAll('.wire-path');
+      allWires.forEach(w => {
+        w.classList.remove('wire-active');
+        w.classList.add('wire-dimmed');
+      });
+
+      const target = document.getElementById(wireId);
+      if (target) {
+        target.classList.remove('wire-dimmed');
+        target.classList.add('wire-active');
+        updateInspector(
+          (target.dataset.protocol || 'SIGNAL').toUpperCase() + ' LINE',
+          target.dataset.title || wireId,
+          target.dataset.protoName || '',
+          target.dataset.desc || ''
+        );
+      }
+    }
+
+    function resetWireHighlight() {
+      const allWires = document.querySelectorAll('.wire-path');
+      allWires.forEach(w => {
+        w.classList.remove('wire-active', 'wire-dimmed');
+      });
+    }
+
+    function filterProtocol(protocol) {
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        if (btn.dataset.filter === protocol) {
+          btn.classList.add('bg-blue-600', 'text-white', 'shadow-sm');
+          btn.classList.remove('bg-slate-100', 'dark:bg-slate-800', 'text-slate-700', 'dark:text-slate-300');
+        } else {
+          btn.classList.remove('bg-blue-600', 'text-white', 'shadow-sm');
+          btn.classList.add('bg-slate-100', 'dark:bg-slate-800', 'text-slate-700', 'dark:text-slate-300');
+        }
+      });
+
+      document.querySelectorAll('.wire-path').forEach(wire => {
+        wire.classList.remove('wire-active');
+        if (protocol === 'all' || wire.dataset.protocol === protocol) {
+          wire.classList.remove('wire-dimmed');
+        } else {
+          wire.classList.add('wire-dimmed');
+        }
+      });
+    }
+
+    let isAnimatingSignals = false;
+    function toggleSignalAnimation() {
+      isAnimatingSignals = !isAnimatingSignals;
+      const label = document.getElementById('animate-label');
+      if (label) {
+        label.textContent = isAnimatingSignals ? 'Stop Signal Flow' : 'Simulate Signal Flow';
+      }
+      document.querySelectorAll('.wire-path').forEach(wire => {
+        if (wire.id !== 'wire-mic-lr') {
+          wire.classList.toggle('wire-animated', isAnimatingSignals);
+        }
+      });
+    }
+
+    // =========================================================
+    // 3. FLOWCHART BUTTON SIMULATOR
+    // =========================================================
+    let simRecording = false;
+    let simStartTime = 0;
+    let simTimerInterval = null;
+
+    function triggerSimulatedButton() {
+      simRecording = !simRecording;
+      const badge = document.getElementById('sim-status-badge');
+      const btnText = document.getElementById('sim-btn-text');
+      const pushBtn = document.getElementById('sim-push-btn');
+      const boxIdle = document.getElementById('box-idle');
+      const boxRec = document.getElementById('box-rec');
+      const timerEl = document.getElementById('sim-timer');
+
+      if (simRecording) {
+        if (badge) {
+          badge.textContent = 'STATE: RECORDING';
+          badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-rose-500/15 text-rose-600 dark:text-rose-400';
+        }
+        if (btnText) btnText.textContent = 'Press Push Button (Stop & Save)';
+        if (pushBtn) {
+          pushBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+          pushBtn.classList.add('bg-rose-600', 'hover:bg-rose-700');
+        }
+        if (boxIdle) {
+          boxIdle.setAttribute('fill', '#1e293b');
+          boxIdle.setAttribute('stroke', '#64748b');
+        }
+        if (boxRec) {
+          boxRec.setAttribute('fill', '#881337');
+          boxRec.setAttribute('stroke', '#f43f5e');
+        }
+
+        simStartTime = Date.now();
+        clearInterval(simTimerInterval);
+        simTimerInterval = setInterval(() => {
+          const elapsed = (Date.now() - simStartTime) / 1000;
+          const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+          const secs = (elapsed % 60).toFixed(1).padStart(4, '0');
+          if (timerEl) timerEl.textContent = `${mins}:${secs}`;
+        }, 100);
+      } else {
+        clearInterval(simTimerInterval);
+        if (badge) {
+          badge.textContent = 'STATE: IDLE (WAV SAVED)';
+          badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+        }
+        if (btnText) btnText.textContent = 'Press Push Button (Start Recording)';
+        if (pushBtn) {
+          pushBtn.classList.remove('bg-rose-600', 'hover:bg-rose-700');
+          pushBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        }
+        if (boxIdle) {
+          boxIdle.setAttribute('fill', '#064e3b');
+          boxIdle.setAttribute('stroke', '#10b981');
+        }
+        if (boxRec) {
+          boxRec.setAttribute('fill', '#1e293b');
+          boxRec.setAttribute('stroke', '#64748b');
+        }
+      }
+    }
+
+    // =========================================================
+    // 4. COPY FIRMWARE CODE HELPER
+    // =========================================================
+    function copyFirmwareCode() {
+      const codeEl = document.getElementById('arduino-code-block');
+      if (!codeEl) return;
+      const textArea = document.createElement('textarea');
+      textArea.value = codeEl.textContent;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+
+      const toast = document.getElementById('toast-msg');
+      const label = document.getElementById('copy-code-label');
+      if (label) label.textContent = 'Copied!';
+      if (toast) {
+        toast.classList.remove('opacity-0');
+        setTimeout(() => {
+          toast.classList.add('opacity-0');
+          if (label) label.textContent = 'Copy Firmware Code';
+        }, 2000);
+      }
+    }
+
+    // Explicitly expose handlers on window & bind wire hover/tap listeners
+    window.switchTab = switchTab;
+    window.toggleTheme = toggleTheme;
+    window.selectModule = selectModule;
+    window.highlightWire = highlightWire;
+    window.filterProtocol = filterProtocol;
+    window.toggleSignalAnimation = toggleSignalAnimation;
+    window.triggerSimulatedButton = triggerSimulatedButton;
+    window.copyFirmwareCode = copyFirmwareCode;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.wire-path').forEach(wire => {
+        wire.addEventListener('mouseenter', () => highlightWire(wire.id));
+        wire.addEventListener('click', (e) => {
+          e.stopPropagation();
+          highlightWire(wire.id);
+        });
+      });
+
+      const svg = document.getElementById('wiring-svg');
+      if (svg) {
+        svg.addEventListener('click', (e) => {
+          if (e.target.tagName === 'rect' && e.target.getAttribute('fill') === 'url(#grid)') {
+            resetWireHighlight();
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
